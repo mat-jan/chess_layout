@@ -4,7 +4,7 @@
  * Bez Supabase — cały auth przez JWT
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 // ─── KONFIGURACJA API ─────────────────────────────────────────────────────────
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -49,34 +49,9 @@ const GLOBAL_CSS = `
   th    { font-family: 'IBM Plex Mono', monospace; font-weight: 600; letter-spacing:.08em; }
   input, select, button { font-family: 'IBM Plex Mono', monospace; }
 
-  ::-webkit-scrollbar       { width:5px; height:5px; }
+  ::-webkit-scrollbar       { width:5px; }
   ::-webkit-scrollbar-track { background:#111; }
   ::-webkit-scrollbar-thumb { background:#2e2a1e; border-radius:3px; }
-
-  .table-scroll { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
-
-  .app-grid {
-    max-width:1120px; margin:0 auto; padding:28px 20px;
-    display:grid; grid-template-columns: 1fr 300px; gap:24px; align-items:start;
-  }
-  .app-grid.no-aside { grid-template-columns: 1fr; }
-
-  .app-header {
-    padding:0 28px; height:60px;
-    display:flex; align-items:center; justify-content:space-between;
-  }
-  .app-header .subtitle { font-size:9px; }
-  .app-header .user-email { max-width:200px; }
-
-  @media (max-width: 760px) {
-    .app-grid { grid-template-columns: 1fr !important; padding:16px 12px; gap:16px; }
-    .app-header { padding:0 14px; height:auto; min-height:56px; flex-wrap:wrap; gap:8px; padding-top:10px; padding-bottom:10px; }
-    .app-header .subtitle { display:none; }
-    .app-header .user-email { display:none; }
-    .tab-row button { padding:8px 12px !important; font-size:10px !important; }
-    th, td { padding:8px 6px !important; font-size:11px !important; }
-    .mgmt-panel { padding:14px !important; }
-  }
 `;
 
 // ─── PALETA ───────────────────────────────────────────────────────────────────
@@ -118,18 +93,6 @@ function generateBuergerPairs(participants, round) {
     if (black === null) return { round_number: round, white_id: white.id, black_id: null, result: "wolny los" };
     return { round_number: round, white_id: white.id, black_id: black.id, result: "" };
   });
-}
-
-function downloadJSON(filename, data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 // ─── MICRO COMPONENTS ─────────────────────────────────────────────────────────
@@ -203,7 +166,6 @@ function TextInput({ value, onChange, placeholder, type="text", error }) {
     <input
       type={type} value={value} onChange={onChange} placeholder={placeholder}
       onFocus={()=>setFocus(true)} onBlur={()=>setFocus(false)}
-      autoCapitalize="none" autoCorrect="off"
       style={{
         background:C.surface,
         border:`1px solid ${error ? C.red : focus ? C.gold : C.border}`,
@@ -236,7 +198,7 @@ function ErrBox({ msg }) {
 
 // ─── EKRAN LOGOWANIA ──────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }) {
-  const [login,   setLogin]   = useState("");
+  const [email,   setEmail]   = useState("");
   const [pass,    setPass]    = useState("");
   const [err,     setErr]     = useState("");
   const [loading, setLoading] = useState(false);
@@ -244,11 +206,9 @@ function LoginScreen({ onLogin }) {
   async function handleLogin() {
     setErr(""); setLoading(true);
     try {
-      // Uwaga: pole "login" wysyłane jest pod kluczem "email", żeby zachować
-      // zgodność z istniejącym endpointem backendu /auth/login (bez zmian w API).
       const data = await apiFetch("/auth/login", {
         method: "POST",
-        body: { email: login, password: pass },
+        body: { email, password: pass },
       });
       setToken(data.access_token);
       onLogin(data.user, data.role);
@@ -266,7 +226,6 @@ function LoginScreen({ onLogin }) {
     <div style={{
       minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
       background:`radial-gradient(ellipse at 50% 30%, #1c1608 0%, ${C.bg} 70%)`,
-      padding:"20px",
     }}>
       <div style={{
         position:"fixed", inset:0, opacity:.03, pointerEvents:"none",
@@ -276,7 +235,7 @@ function LoginScreen({ onLogin }) {
 
       <div className="fade-up" style={{
         background:C.panel, border:`1px solid ${C.border}`,
-        borderRadius:8, padding:"40px 36px", width:360, maxWidth:"100%",
+        borderRadius:8, padding:"40px 36px", width:360,
         boxShadow:`0 24px 60px rgba(0,0,0,.6)`,
       }}>
         <div style={{ textAlign:"center", marginBottom:32 }}>
@@ -291,9 +250,9 @@ function LoginScreen({ onLogin }) {
         </div>
 
         <div style={{ display:"flex", flexDirection:"column", gap:14 }} onKeyDown={handleKeyDown}>
-          <Field label="LOGIN">
-            <TextInput value={login} onChange={e=>setLogin(e.target.value)}
-              placeholder="login" type="text" error={!!err} />
+          <Field label="ADRES E-MAIL">
+            <TextInput value={email} onChange={e=>setEmail(e.target.value)}
+              placeholder="adres@email.pl" type="email" error={!!err} />
           </Field>
           <Field label="HASŁO">
             <TextInput value={pass} onChange={e=>setPass(e.target.value)}
@@ -339,7 +298,6 @@ function PairsTable({ pairs, participants, canEdit, onResultChange }) {
             }}>RUNDA {r}</div>
             <div style={{ flex:1, borderTop:`1px solid ${C.border}` }} />
           </div>
-          <div className="table-scroll">
           <table>
             <thead>
               <tr style={{ borderBottom:`2px solid ${C.border}` }}>
@@ -404,7 +362,6 @@ function PairsTable({ pairs, participants, canEdit, onResultChange }) {
               })}
             </tbody>
           </table>
-          </div>
         </div>
       ))}
     </div>
@@ -445,7 +402,6 @@ function Scoreboard({ participants, pairs }) {
         color:C.gold, fontWeight:700, fontSize:11,
         letterSpacing:".15em", marginBottom:12,
       }}>KLASYFIKACJA GENERALNA</div>
-      <div className="table-scroll">
       <table>
         <thead>
           <tr style={{borderBottom:`2px solid ${C.border}`}}>
@@ -477,88 +433,36 @@ function Scoreboard({ participants, pairs }) {
           ))}
         </tbody>
       </table>
-      </div>
     </div>
   );
 }
 
 // ─── PANEL UCZESTNIKÓW ────────────────────────────────────────────────────────
 function ParticipantsPanel({ participants, canDelete, onDelete }) {
-  const [query, setQuery]       = useState("");
-  const [sortBy, setSortBy]     = useState("imie"); // "imie" | "klasa"
-  const [sortDir, setSortDir]   = useState("asc");  // "asc" | "desc"
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let list = participants;
-    if (q) {
-      list = list.filter(p =>
-        p.imie.toLowerCase().includes(q) || p.klasa.toLowerCase().includes(q)
-      );
-    }
-    list = [...list].sort((a,b) => {
-      const r = String(a[sortBy]).localeCompare(String(b[sortBy]), "pl");
-      return sortDir === "asc" ? r : -r;
-    });
-    return list;
-  }, [participants, query, sortBy, sortDir]);
-
-  function toggleSort(field) {
-    if (sortBy === field) setSortDir(d => d==="asc" ? "desc" : "asc");
-    else { setSortBy(field); setSortDir("asc"); }
-  }
-
   if (!participants.length) return (
     <div style={{color:C.muted,fontSize:12,padding:"10px 0"}}>Brak uczestników.</div>
   );
-
   return (
-    <div>
-      <div style={{ display:"flex", gap:6, marginTop:4, marginBottom:8 }}>
-        <TextInput
-          value={query}
-          onChange={e=>setQuery(e.target.value)}
-          placeholder="Szukaj (imię lub klasa)…"
-        />
-      </div>
-      <div style={{ display:"flex", gap:6, marginBottom:10 }}>
-        {[["imie","Imię"],["klasa","Klasa"]].map(([field,label])=>(
-          <button key={field} onClick={()=>toggleSort(field)} style={{
-            background: sortBy===field ? C.goldDim : "transparent",
-            color: sortBy===field ? C.gold : C.muted,
-            border:`1px solid ${C.border}`, borderRadius:3,
-            fontSize:10, letterSpacing:".06em", padding:"4px 9px",
-            cursor:"pointer", display:"flex", alignItems:"center", gap:4,
-          }}>
-            Sortuj: {label} {sortBy===field ? (sortDir==="asc" ? "↑" : "↓") : ""}
-          </button>
-        ))}
-      </div>
-      {filtered.length === 0 ? (
-        <div style={{color:C.muted,fontSize:12,padding:"6px 0"}}>Brak wyników.</div>
-      ) : (
-        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-          {filtered.map(p=>(
-            <div key={p.id} className="fade-in" style={{
-              background:C.surface, border:`1px solid ${C.border}`,
-              borderRadius:4, padding:"6px 10px",
-              display:"flex", alignItems:"center", gap:8, fontSize:12,
-            }}>
-              <span style={{color:C.white}}>{p.imie}</span>
-              <span style={{
-                background:C.border, color:C.muted,
-                borderRadius:3, padding:"1px 6px", fontSize:10, letterSpacing:".06em",
-              }}>{p.klasa}</span>
-              {canDelete && (
-                <button onClick={()=>onDelete(p.id)} style={{
-                  background:"none", border:"none", color:C.red,
-                  cursor:"pointer", fontSize:15, lineHeight:1, padding:0,
-                }} title="Usuń">×</button>
-              )}
-            </div>
-          ))}
+    <div style={{display:"flex",flexWrap:"wrap",gap:7,marginTop:8}}>
+      {participants.map(p=>(
+        <div key={p.id} className="fade-in" style={{
+          background:C.surface, border:`1px solid ${C.border}`,
+          borderRadius:4, padding:"6px 10px",
+          display:"flex", alignItems:"center", gap:8, fontSize:12,
+        }}>
+          <span style={{color:C.white}}>{p.imie}</span>
+          <span style={{
+            background:C.border, color:C.muted,
+            borderRadius:3, padding:"1px 6px", fontSize:10, letterSpacing:".06em",
+          }}>{p.klasa}</span>
+          {canDelete && (
+            <button onClick={()=>onDelete(p.id)} style={{
+              background:"none", border:"none", color:C.red,
+              cursor:"pointer", fontSize:15, lineHeight:1, padding:0,
+            }} title="Usuń">×</button>
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -576,9 +480,6 @@ export default function App() {
   const [tab,          setTab]          = useState("pairs");
   const [loading,      setLoading]      = useState(false);
   const [dataLoading,  setDataLoading]  = useState(false);
-  const [backupErr,    setBackupErr]    = useState("");
-  const [backupMsg,    setBackupMsg]    = useState("");
-  const [importing,    setImporting]    = useState(false);
 
   const nextRound = pairs.length
     ? Math.max(...pairs.map(p=>p.round_number)) + 1
@@ -713,80 +614,6 @@ export default function App() {
     setLoading(false);
   }
 
-  // ── Eksport backupu (JSON: uczestnicy + pary) ───────────────────────────────
-  function handleExportBackup() {
-    setBackupErr(""); setBackupMsg("");
-    const backup = {
-      version: 1,
-      exported_at: new Date().toISOString(),
-      participants,
-      pairs,
-    };
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-    downloadJSON(`turniej-szachowy-backup-${stamp}.json`, backup);
-    setBackupMsg("Backup pobrany.");
-  }
-
-  // ── Import backupu (odtwarza uczestników i pary przez API) ──────────────────
-  async function handleImportBackup(e) {
-    setBackupErr(""); setBackupMsg("");
-    const file = e.target.files?.[0];
-    e.target.value = ""; // umożliwia ponowny wybór tego samego pliku
-    if (!file) return;
-
-    let parsed;
-    try {
-      const text = await file.text();
-      parsed = JSON.parse(text);
-    } catch {
-      setBackupErr("Nieprawidłowy plik backupu (błąd JSON).");
-      return;
-    }
-
-    const importedParticipants = Array.isArray(parsed.participants) ? parsed.participants : [];
-    const importedPairs        = Array.isArray(parsed.pairs)        ? parsed.pairs        : [];
-    if (!importedParticipants.length && !importedPairs.length) {
-      setBackupErr("Plik nie zawiera danych do zaimportowania.");
-      return;
-    }
-
-    if (!window.confirm(
-      `Zaimportować backup? Zostanie utworzonych ${importedParticipants.length} uczestników i ${importedPairs.length} par (dodane do obecnych danych, bez usuwania istniejących).`
-    )) return;
-
-    setImporting(true);
-    try {
-      // mapa starych id -> nowe id, bo backend nadaje nowe identyfikatory
-      const idMap = {};
-      for (const p of importedParticipants) {
-        const created = await apiFetch("/participants", {
-          method: "POST",
-          body: { imie: p.imie, klasa: p.klasa },
-        });
-        idMap[p.id] = created.id;
-      }
-
-      const mappedPairs = importedPairs
-        .map(pr => ({
-          round_number: pr.round_number,
-          white_id: idMap[pr.white_id] ?? pr.white_id,
-          black_id: pr.black_id == null ? null : (idMap[pr.black_id] ?? pr.black_id),
-          result: pr.result ?? "",
-        }))
-        .filter(pr => pr.white_id != null);
-
-      if (mappedPairs.length) {
-        await apiFetch("/pairs", { method: "POST", body: { pairs: mappedPairs } });
-      }
-
-      await loadData();
-      setBackupMsg(`Zaimportowano ${importedParticipants.length} uczestników i ${mappedPairs.length} par.`);
-    } catch (err) {
-      setBackupErr(`Błąd importu: ${err.message}`);
-    }
-    setImporting(false);
-  }
-
   // ── Ładowanie sesji ─────────────────────────────────────────────────────────
   if (user === undefined) return (
     <>
@@ -809,8 +636,10 @@ export default function App() {
     <>
       <style>{GLOBAL_CSS}</style>
 
-      <header className="app-header" style={{
+      <header style={{
         background:C.black, borderBottom:`1px solid ${C.border}`,
+        padding:"0 28px", display:"flex", alignItems:"center",
+        justifyContent:"space-between", height:60,
         position:"sticky", top:0, zIndex:100,
       }}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -820,13 +649,13 @@ export default function App() {
               fontFamily:"'Playfair Display', serif",
               fontSize:18, fontWeight:900, color:C.gold, lineHeight:1.1,
             }}>TURNIEJ SZACHOWY</div>
-            <div className="subtitle" style={{color:C.muted,letterSpacing:".2em"}}>XII Liceum Ogólnokształcące im. Henryka Sienkiewicza w Warszawie</div>
+            <div style={{fontSize:9,color:C.muted,letterSpacing:".2em"}}>XII Liceum Ogólnokształcące im. Henryka Sienkiewicza w Warszawie</div>
           </div>
         </div>
 
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           {role!=="guest" && (
-            <span className="user-email" style={{color:C.muted,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            <span style={{color:C.muted,fontSize:11,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               {user?.email}
             </span>
           )}
@@ -839,9 +668,14 @@ export default function App() {
         </div>
       </header>
 
-      <div className={`app-grid${canEdit ? "" : " no-aside"}`}>
+      <div style={{
+        maxWidth:1120, margin:"0 auto", padding:"28px 20px",
+        display:"grid",
+        gridTemplateColumns: canEdit ? "1fr 300px" : "1fr",
+        gap:24, alignItems:"start",
+      }}>
         <main>
-          <div className="tab-row" style={{display:"flex",gap:2,marginBottom:20}}>
+          <div style={{display:"flex",gap:2,marginBottom:20}}>
             {[["pairs","Pary i wyniki"],["score","Klasyfikacja"]].map(([k,label])=>(
               <button key={k} onClick={()=>setTab(k)} style={{
                 background: tab===k ? C.gold : C.surface,
@@ -877,7 +711,7 @@ export default function App() {
 
         {canEdit && (
           <aside className="fade-up" style={{display:"flex",flexDirection:"column",gap:16}}>
-            <div className="mgmt-panel" style={{
+            <div style={{
               background:C.panel, border:`1px solid ${C.border}`,
               borderRadius:4, padding:20,
             }}>
@@ -928,37 +762,6 @@ export default function App() {
                 </>
               )}
 
-              <Divider label="BACKUP" />
-
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                <Btn variant="ghost" full onClick={handleExportBackup}>
-                  ⭳ Eksportuj backup (JSON)
-                </Btn>
-                <label style={{ width:"100%" }}>
-                  <div style={{
-                    border:`1px solid ${C.border}`, borderRadius:4,
-                    padding:"10px 22px", textAlign:"center",
-                    fontSize:13, fontWeight:600, letterSpacing:".06em",
-                    color: importing ? C.muted : C.cream,
-                    cursor: importing ? "not-allowed" : "pointer",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                  }}>
-                    {importing && <Spinner />}
-                    ⭱ {importing ? "Importowanie…" : "Importuj backup"}
-                  </div>
-                  <input
-                    type="file" accept="application/json,.json"
-                    onChange={handleImportBackup}
-                    disabled={importing}
-                    style={{ display:"none" }}
-                  />
-                </label>
-                <ErrBox msg={backupErr} />
-                {backupMsg && (
-                  <div style={{ color:C.gold, fontSize:11, marginTop:2 }}>{backupMsg}</div>
-                )}
-              </div>
-
               <Divider label="UCZESTNICY" />
 
               <div style={{
@@ -998,17 +801,7 @@ export default function App() {
         textAlign:"center", color:C.muted, fontSize:10,
         padding:"24px 0 40px", letterSpacing:".12em",
       }}>
-        <div>♟ TURNIEJ SZACHOWY · {new Date().getFullYear()}</div>
-        <div style={{ marginTop:6, fontSize:9, letterSpacing:".08em", opacity:.55 }}>
-          created by{" "}
-          <a
-            href="https://github.com/mat-jan/"
-            target="_blank" rel="noopener noreferrer"
-            style={{ color:C.muted, textDecoration:"none", borderBottom:`1px dotted ${C.border}` }}
-          >
-            mat-jan (mat-jan)
-          </a>
-        </div>
+        ♟ TURNIEJ SZACHOWY · {new Date().getFullYear()}
       </footer>
     </>
   );
