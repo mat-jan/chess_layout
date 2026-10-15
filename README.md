@@ -1,165 +1,117 @@
-# ♟ Turniej Szachowy — Wdrożenie na VPS
+# ♟ Turniej Szachowy — migracja na Supabase
 
-## Struktura projektu
+Ten projekt przestaje korzystać z własnego backendu FastAPI + PostgreSQL na VPS.
+Zamiast tego frontend łączy się bezpośrednio z **Supabase** (Auth + Postgres + RLS),
+a jedyna operacja wymagająca uprawnień administratora (tworzenie kont) jest
+obsługiwana przez **Edge Function**.
 
-```
-app/
-├── backend/
-│   ├── main.py            ← FastAPI (cały serwer API)
-│   ├── requirements.txt   ← zależności Pythona
-│   └── .env.example       ← szablon konfiguracji
-├── frontend/
-│   ├── App.jsx            ← główny komponent React (bez Supabase)
-│   ├── src/main.jsx       ← entry point
-│   ├── index.html
-│   ├── vite.config.js
-│   ├── package.json
-│   ├── serve.js           ← serwer Node.js dla build
-│   └── .env.example
-└── scripts/
-    ├── schema.sql              ← schemat PostgreSQL
-    ├── seed.py                 ← tworzy superadmina
-    ├── install.sh              ← instalacja jedną komendą
-    ├── chess-backend.service   ← systemd: FastAPI
-    └── chess-frontend.service  ← systemd: Node.js
-```
+## Co się zmienia
 
----
+| Wcześniej (VPS)                          | Teraz (Supabase)                              |
+|-------------------------------------------|------------------------------------------------|
+| `backend/main.py` (FastAPI)               | **usunięte** — niepotrzebne                     |
+| Własny JWT (`JWT_SECRET`)                 | Supabase Auth (JWT zarządzany automatycznie)    |
+| Tabela `users` + bcrypt                   | `auth.users` (Supabase) + tabela `profiles`     |
+| `chess-backend.service` (systemd)         | **usunięte**                                    |
+| `scripts/seed.py`                         | ręczne utworzenie pierwszego superadmina (patrz niżej) |
+| `DATABASE_URL`, `JWT_SECRET` w `.env`     | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`   |
+| `POST /users` w FastAPI                   | Edge Function `create-user`                     |
+| `chess-frontend.service` (serwuje build)  | **zostaje bez zmian**                           |
 
-## Instalacja jedną komendą (Ubuntu 22.04/24.04)
+Dostałeś 4 pliki:
 
-```bash
-# Skopiuj cały katalog chess-vps na serwer:
-scp -r app/ root@TWOJ_IP:/root/
-
-# Zaloguj się i uruchom:
-ssh root@TWOJ_IP
-cd /root/app/scripts
-bash install.sh
-```
-
-Skrypt automatycznie:
-- Instaluje PostgreSQL, Python 3, Node.js
-- Tworzy bazę danych i użytkownika z losowym hasłem
-- Zakłada tabele (schema.sql)
-- Instaluje backend w virtualenv
-- Buduje frontend React (Vite)
-- Rejestruje i uruchamia dwie usługi systemd
-- Pyta o e-mail i hasło pierwszego superadmina
+- **`schema-supabase.sql`** — schemat bazy (tabele `profiles`, `participants`, `pairs`) + RLS
+- **`App.jsx`** — frontend przepisany pod `supabase-js`, zastępuje `frontend/App.jsx`
+- **`create-user/index.ts`** — Edge Function do tworzenia kont (uruchamia się po stronie Supabase, nie na VPS)
+- **`frontend.env.example`** — wzór nowego `.env` dla frontendu
 
 ---
 
-## Ręczna instalacja krok po kroku
+## Krok 1 — Załóż projekt Supabase
 
-### 1. PostgreSQL
+1. Wejdź na [supabase.com](https://supabase.com) → **New project**.
+2. Zapisz sobie z **Project Settings → API**:
+   - `Project URL`
+   - klucz `anon public`
+   - (do kroku 3) `Project Reference ID` — widoczny w URL projektu i w ustawieniach
+
+## Krok 2 — Wgraj schemat bazy
+
+1. W Supabase: **SQL Editor → New query**.
+2. Wklej całą zawartość `schema-supabase.sql` i kliknij **Run**.
+3. To tworzy tabele `profiles`, `participants`, `pairs` oraz reguły RLS (kto co może robić).
+
+## Krok 3 — Utwórz pierwszego superadmina (ręcznie, raz)
+
+Chicken-and-egg: Edge Function do tworzenia kont wymaga, żeby wywołujący *już* był superadminem — więc pierwsze konto zakładasz ręcznie:
+
+1. Supabase → **Authentication → Users → Add user** — podaj e-mail i hasło, zaznacz "Auto Confirm User".
+2. Skopiuj **UUID** nowo utworzonego użytkownika (kolumna `id` na liście).
+3. Wróć do **SQL Editor** i uruchom (podmieniając wartości):
+   ```sql
+   insert into public.profiles (id, email, role)
+   values ('WKLEJONY-UUID', 'twoj@email.pl', 'superadmin');
+   ```
+4. Od teraz możesz się tym kontem zalogować w aplikacji i tworzyć kolejne konta (teacher/superadmin) z panelu bocznego.
+
+## Krok 4 — Wdróż Edge Function
+
+Potrzebujesz [Supabase CLI](https://supabase.com/docs/guides/cli) (`npm install -g supabase` albo `brew install supabase/tap/supabase`).
 
 ```bash
-sudo apt install postgresql
-sudo -u postgres psql
+supabase login
+supabase link --project-ref TWOJ-PROJECT-REF
+
+mkdir -p supabase/functions
+cp -r create-user supabase/functions/
+
+supabase functions deploy create-user
 ```
 
-```sql
-CREATE USER chess WITH PASSWORD 'twoje_haslo';
-CREATE DATABASE chess_db OWNER chess;
-\q
-```
+Sekrety (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`) są wstrzykiwane automatycznie przez Supabase — nic nie trzeba ustawiać ręcznie.
 
-```bash
-psql -U chess -d chess_db -f scripts/schema.sql
-```
-
-### 2. Backend (FastAPI)
-
-```bash
-cd backend
-cp .env.example .env
-# Edytuj .env — wpisz DATABASE_URL i JWT_SECRET
-
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Utwórz superadmina:
-python3 ../scripts/seed.py
-
-# Uruchom dev:
-uvicorn main:app --reload --port 8000
-
-# Swagger UI dostępny na: http://localhost:8000/docs
-```
-
-### 3. Frontend (React + Vite)
+## Krok 5 — Podmień frontend
 
 ```bash
 cd frontend
-cp .env.example .env
-# Edytuj .env — wpisz VITE_API_URL=http://TWOJ_IP:8000
-
-npm install
-npm run build      # tworzy katalog dist/
-node serve.js      # serwuje na porcie 3000
+npm install @supabase/supabase-js
 ```
 
----
-
-## Zarządzanie usługami
+- Zamień `frontend/App.jsx` na przesłany plik `App.jsx`.
+- Skopiuj `frontend.env.example` jako `frontend/.env` i uzupełnij `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` z Kroku 1.
+- Usuń stare zmienne (`VITE_API_URL`) — nie są już używane.
 
 ```bash
-# Status
-systemctl status chess-backend
-systemctl status chess-frontend
-
-# Logi na żywo
-journalctl -u chess-backend  -f
-journalctl -u chess-frontend -f
-
-# Restart po zmianach
-systemctl restart chess-backend
-systemctl restart chess-frontend
+npm run build
+node serve.js    # bez zmian — nadal serwuje dist/ na porcie 3000
 ```
 
----
+## Krok 6 — Posprzątaj VPS
 
-## Dodawanie użytkowników
-
-Tylko superadmin może tworzyć konta przez API:
+Możesz bezpiecznie usunąć:
 
 ```bash
-curl -X POST http://TWOJ_IP:8000/users \
-  -H "Authorization: Bearer TWOJ_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"nauczyciel@szkola.pl","password":"haslo123","role":"teacher"}'
+systemctl stop chess-backend
+systemctl disable chess-backend
+rm /etc/systemd/system/chess-backend.service
+rm -rf /root/app/backend
 ```
 
-Role: `teacher` (dodaje uczestników, generuje pary, wpisuje wyniki) / `superadmin` (reset turnieju, zarządzanie kontami).
+`chess-frontend.service` **zostaw** — frontend nadal musi być gdzieś serwowany.
+PostgreSQL na VPS też możesz odinstalować, jeśli nic innego go nie używa — cała baza teraz żyje w Supabase.
 
 ---
 
-## Role użytkowników
+## Jak to teraz działa (skrót)
 
-| Akcja                    | gość | teacher | superadmin |
-|--------------------------|------|---------|------------|
-| Podgląd par i wyników    | ✔    | ✔       | ✔          |
-| Dodawanie uczestników    | —    | ✔       | ✔          |
-| Generowanie par          | —    | ✔       | ✔          |
-| Wpisywanie wyników       | —    | ✔       | ✔          |
-| Usuwanie uczestników     | —    | —       | ✔          |
-| Reset turnieju           | —    | —       | ✔          |
-| Zarządzanie kontami      | —    | —       | ✔          |
+- **Logowanie**: `supabase.auth.signInWithPassword()` — Supabase sam zarządza sesją i tokenem (nic nie trzymamy ręcznie w `localStorage`).
+- **Rola** (teacher/superadmin) leży w tabeli `profiles`, powiązanej z `auth.users` przez `id`.
+- **Kto co widzi/może robić** — pilnuje tego **RLS** w bazie (polityki w `schema-supabase.sql`), nie kod frontendu. Nawet gdyby ktoś ominął UI, baza i tak odrzuci nieuprawnioną operację.
+- **Goście** (niezalogowani) mają dostęp tylko do odczytu (`select`) uczestników i par — zero zmian w logice.
+- **Tworzenie kont**: tylko superadmin, przez panel w aplikacji → wywołuje Edge Function `create-user` → ta sprawdza uprawnienia wywołującego i dopiero wtedy tworzy konto kluczem `service_role` (który nigdy nie trafia do przeglądarki).
 
----
+## Najczęstsze problemy
 
-## Swagger UI (dokumentacja API)
-
-Po uruchomieniu backendu dostępna pod:
-```
-http://TWOJ_IP:8000/docs
-```
-
----
-
-## Licencja / License
-
-PL: Ten projekt jest udostępniony na podstawie **Licencji Użytkowania Ograniczonego** wyłącznie do celów edukacyjnych. Jest on przeznaczony do wyłącznego użytku przez **XII Liceum Ogólnokształcące im. Henryka Sienkiewicza w Warszawie**. Wykorzystanie komercyjne jest zabronione. Szczegóły znajdują się w pliku [LICENSE](LICENSE).
-
-EN: This project is released under a **Limited Use License** for educational purposes. It is strictly for the use of **XII Liceum Ogólnokształcące im. Henryka Sienkiewicza in Warsaw**. Commercial use is prohibited. Please refer to the [LICENSE](LICENSE) file for details.
+- **"Tylko superadmin może tworzyć konta"** mimo zalogowania jako superadmin → sprawdź, czy w tabeli `profiles` rola faktycznie jest ustawiona (Krok 3).
+- **Puste dane po zalogowaniu** → sprawdź w konsoli przeglądarki błędy RLS (`new row violates row-level security policy`) — zwykle znaczy, że profil użytkownika nie ma poprawnej roli.
+- **CORS / błąd wywołania Edge Function** → upewnij się, że `supabase functions deploy create-user` zakończyło się sukcesem (`supabase functions list` pokaże status).

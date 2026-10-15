@@ -1,36 +1,17 @@
 /**
  * ♟ TURNIEJ SZACHOWY — App.jsx
- * Backend: FastAPI + PostgreSQL (własny VPS)
- * Bez Supabase — cały auth przez JWT
+ * Backend: Supabase (Auth + Postgres + RLS)
+ * Tworzenie kont: Edge Function "create-user" (service_role)
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-// ─── KONFIGURACJA API ─────────────────────────────────────────────────────────
-const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-
-// ─── API CLIENT ───────────────────────────────────────────────────────────────
-function getToken() { return localStorage.getItem("chess_token"); }
-function setToken(t) { t ? localStorage.setItem("chess_token", t) : localStorage.removeItem("chess_token"); }
-
-async function apiFetch(path, opts = {}) {
-  const token = getToken();
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers ?? {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "Błąd API");
-  }
-  if (res.status === 204) return null;
-  return res.json();
-}
+// ─── KONFIGURACJA SUPABASE ─────────────────────────────────────────────────────
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 // ─── GLOBAL CSS ───────────────────────────────────────────────────────────────
 const GLOBAL_CSS = `
@@ -205,16 +186,17 @@ function LoginScreen({ onLogin }) {
 
   async function handleLogin() {
     setErr(""); setLoading(true);
-    try {
-      const data = await apiFetch("/auth/login", {
-        method: "POST",
-        body: { email, password: pass },
-      });
-      setToken(data.access_token);
-      onLogin(data.user, data.role);
-    } catch (e) {
-      setErr(e.message);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email, password: pass,
+    });
+    if (error) {
+      setErr(error.message === "Invalid login credentials"
+        ? "Nieprawidłowy email lub hasło"
+        : error.message);
+      setLoading(false);
+      return;
     }
+    onLogin(data.user);
     setLoading(false);
   }
 
@@ -264,7 +246,7 @@ function LoginScreen({ onLogin }) {
 
         <Divider label="LUB" />
 
-        <Btn variant="ghost" full onClick={() => onLogin(null, "guest")}>
+        <Btn variant="ghost" full onClick={() => onLogin(null)}>
           Kontynuuj jako gość (tylko podgląd)
         </Btn>
       </div>
@@ -467,6 +449,60 @@ function ParticipantsPanel({ participants, canDelete, onDelete }) {
   );
 }
 
+// ─── PANEL TWORZENIA KONT (tylko superadmin) ─────────────────────────────────
+function CreateUserPanel() {
+  const [email, setEmail] = useState("");
+  const [pass, setPass]   = useState("");
+  const [role, setRole]   = useState("teacher");
+  const [msg, setMsg]     = useState("");
+  const [err, setErr]     = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleCreate() {
+    setErr(""); setMsg(""); setLoading(true);
+    const { data, error } = await supabase.functions.invoke("create-user", {
+      body: { email, password: pass, role },
+    });
+    if (error) {
+      setErr(error.message || "Błąd tworzenia konta");
+    } else if (data?.error) {
+      setErr(data.error);
+    } else {
+      setMsg(`Utworzono konto: ${email} (${role})`);
+      setEmail(""); setPass("");
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div style={{
+      background:C.surface, border:`1px solid ${C.border}`,
+      borderRadius:4, padding:14,
+    }}>
+      <div style={{color:C.goldDim,fontWeight:600,marginBottom:10,fontSize:11,letterSpacing:".08em"}}>
+        NOWE KONTO
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <TextInput value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@szkola.pl" type="email" />
+        <TextInput value={pass} onChange={e=>setPass(e.target.value)} placeholder="hasło (min. 8 znaków)" type="password" />
+        <select
+          value={role} onChange={e=>setRole(e.target.value)}
+          style={{
+            background:C.surface, border:`1px solid ${C.border}`,
+            color:C.cream, borderRadius:4, padding:"8px 10px", fontSize:12,
+          }}
+        >
+          <option value="teacher">teacher</option>
+          <option value="superadmin">superadmin</option>
+        </select>
+        <Btn small onClick={handleCreate} loading={loading}>Utwórz konto</Btn>
+        <ErrBox msg={err} />
+        {msg && <div style={{color:C.gold,fontSize:11}}>{msg}</div>}
+      </div>
+    </div>
+  );
+}
+
 // ─── GŁÓWNA APLIKACJA ─────────────────────────────────────────────────────────
 export default function App() {
   const [user,         setUser]         = useState(undefined);
@@ -488,53 +524,68 @@ export default function App() {
   const canEdit   = role==="teacher" || role==="superadmin";
   const canDelete = role==="superadmin";
 
-  // ── Wczytaj dane ────────────────────────────────────────────────────────────
+  // ── Wczytaj dane (uczestnicy + pary) ─────────────────────────────────────
   const loadData = useCallback(async () => {
     setDataLoading(true);
-    try {
-      const [prt, prs] = await Promise.all([
-        apiFetch("/participants"),
-        apiFetch("/pairs"),
-      ]);
-      setParticipants(prt ?? []);
-      setPairs(prs ?? []);
-    } catch (_) {}
+    const [{ data: prt }, { data: prs }] = await Promise.all([
+      supabase.from("participants").select("*").order("imie"),
+      supabase.from("pairs").select("*").order("round_number").order("id"),
+    ]);
+    setParticipants(prt ?? []);
+    setPairs(prs ?? []);
     setDataLoading(false);
   }, []);
 
-  // ── Sprawdź zapisany token ───────────────────────────────────────────────
+  // ── Wczytaj rolę zalogowanego użytkownika z tabeli profiles ──────────────
+  async function loadRole(userId) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+    return data?.role ?? "teacher";
+  }
+
+  // ── Sprawdź istniejącą sesję + nasłuchuj zmian logowania ──────────────────
   useEffect(() => {
-    const token = getToken();
-    if (!token) { setUser(null); return; }
-    apiFetch("/auth/me")
-      .then(me => {
-        setUser({ email: me.email });
-        setRole(me.role);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const r = await loadRole(session.user.id);
+        setUser(session.user);
+        setRole(r);
         loadData();
-      })
-      .catch(() => {
-        setToken(null);
+      } else {
         setUser(null);
-      });
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const r = await loadRole(session.user.id);
+        setUser(session.user);
+        setRole(r);
+        setIsGuest(false);
+        loadData();
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, [loadData]);
 
-  // ── Logowanie ───────────────────────────────────────────────────────────────
-  function handleLogin(u, r) {
-    if (u === null && r === "guest") {
+  // ── Logowanie (login) lub tryb gościa ─────────────────────────────────────
+  function handleLogin(u) {
+    if (u === null) {
       setIsGuest(true);
       setRole("guest");
       loadData();
       return;
     }
-    setUser(u);
-    setRole(r);
-    setIsGuest(false);
-    if (u) loadData();
+    // reszta (user, role) ustawi się przez onAuthStateChange powyżej
   }
 
   // ── Wylogowanie ─────────────────────────────────────────────────────────────
-  function handleLogout() {
-    setToken(null);
+  async function handleLogout() {
+    await supabase.auth.signOut();
     setUser(null);
     setIsGuest(false);
     setRole("guest");
@@ -553,25 +604,27 @@ export default function App() {
     if (!imie || !klasa) { setAddErr("Nieprawidłowy format."); return; }
 
     setLoading(true);
-    try {
-      const data = await apiFetch("/participants", {
-        method: "POST",
-        body: { imie, klasa },
-      });
+    const { data, error } = await supabase
+      .from("participants")
+      .insert({ imie, klasa })
+      .select()
+      .single();
+
+    if (error) {
+      setAddErr(error.message);
+    } else {
       setParticipants(prev =>
         [...prev, data].sort((a,b)=>a.imie.localeCompare(b.imie,"pl"))
       );
       setInputVal("");
-    } catch (e) {
-      setAddErr(e.message);
     }
     setLoading(false);
   }
 
   // ── Usuń uczestnika ─────────────────────────────────────────────────────────
   async function deleteParticipant(id) {
-    await apiFetch(`/participants/${id}`, { method: "DELETE" });
-    setParticipants(prev => prev.filter(p=>p.id!==id));
+    const { error } = await supabase.from("participants").delete().eq("id", id);
+    if (!error) setParticipants(prev => prev.filter(p=>p.id!==id));
   }
 
   // ── Generuj pary ────────────────────────────────────────────────────────────
@@ -580,14 +633,11 @@ export default function App() {
     if (participants.length < 2) { setGenErr("Minimum 2 uczestników."); return; }
     const newPairs = generateBuergerPairs(participants, nextRound);
     setLoading(true);
-    try {
-      const data = await apiFetch("/pairs", {
-        method: "POST",
-        body: { pairs: newPairs },
-      });
+    const { data, error } = await supabase.from("pairs").insert(newPairs).select();
+    if (error) {
+      setGenErr(error.message);
+    } else {
       setPairs(prev => [...prev, ...data]);
-    } catch (e) {
-      setGenErr(e.message);
     }
     setLoading(false);
   }
@@ -595,10 +645,7 @@ export default function App() {
   // ── Edytuj wynik ────────────────────────────────────────────────────────────
   async function handleResultChange(pairId, result) {
     setPairs(prev => prev.map(p=>p.id===pairId ? {...p,result} : p));
-    await apiFetch(`/pairs/${pairId}`, {
-      method: "PATCH",
-      body: { result },
-    });
+    await supabase.from("pairs").update({ result }).eq("id", pairId);
   }
 
   // ── Reset turnieju ──────────────────────────────────────────────────────────
@@ -607,8 +654,8 @@ export default function App() {
       "Zresetować cały turniej? Usunięte zostaną pary i wszyscy uczestnicy."
     )) return;
     setLoading(true);
-    await apiFetch("/pairs",        { method: "DELETE" });
-    await apiFetch("/participants", { method: "DELETE" });
+    await supabase.from("pairs").delete().neq("id", 0);
+    await supabase.from("participants").delete().neq("id", 0);
     setPairs([]);
     setParticipants([]);
     setLoading(false);
@@ -781,6 +828,8 @@ export default function App() {
                 onDelete={deleteParticipant}
               />
             </div>
+
+            {canDelete && <CreateUserPanel />}
 
             <div style={{
               background:C.surface, border:`1px solid ${C.border}`,
