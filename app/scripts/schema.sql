@@ -33,3 +33,11 @@ CREATE TABLE IF NOT EXISTS pairs (
 CREATE INDEX IF NOT EXISTS idx_pairs_round ON pairs(round_number);
 CREATE INDEX IF NOT EXISTS idx_pairs_white ON pairs(white_id);
 CREATE INDEX IF NOT EXISTS idx_pairs_black ON pairs(black_id);
+
+-- ─── UNIKALNOŚĆ PAR ──────────────────────────────────────────────────────────
+-- Zapobiega podwójnemu wygenerowaniu par dla tej samej rundy (np. dwa kliknięcia
+-- "Generuj pary" w tym samym czasie) poprzez wymuszenie unikalności udziału
+-- zawodnika w rundzie, niezależnie od tego, czy gra białymi czy czarnymi.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pairs_round_white ON pairs(round_number, white_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pairs_round_black ON pairs(round_number, black_id)
+    WHERE black_id IS NOT NULL;

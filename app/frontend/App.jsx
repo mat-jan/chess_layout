@@ -88,7 +88,7 @@ const C = {
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-function generateBuergerPairs(participants, round) {
+export function generateBuergerPairs(participants, round) {
   const sorted = [...participants].sort((a, b) =>
     a.imie.localeCompare(b.imie, "pl")
   );
@@ -576,6 +576,7 @@ export default function App() {
   const [tab,          setTab]          = useState("pairs");
   const [loading,      setLoading]      = useState(false);
   const [dataLoading,  setDataLoading]  = useState(false);
+  const [loadErr,      setLoadErr]      = useState("");
   const [backupErr,    setBackupErr]    = useState("");
   const [backupMsg,    setBackupMsg]    = useState("");
   const [importing,    setImporting]    = useState(false);
@@ -590,6 +591,7 @@ export default function App() {
   // ── Wczytaj dane ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setDataLoading(true);
+    setLoadErr("");
     try {
       const [prt, prs] = await Promise.all([
         apiFetch("/participants"),
@@ -597,8 +599,11 @@ export default function App() {
       ]);
       setParticipants(prt ?? []);
       setPairs(prs ?? []);
-    } catch (_) {}
-    setDataLoading(false);
+    } catch (e) {
+      setLoadErr(e.message || "Nie udało się wczytać danych turnieju.");
+    } finally {
+      setDataLoading(false);
+    }
   }, []);
 
   // ── Sprawdź zapisany token ───────────────────────────────────────────────
@@ -663,8 +668,9 @@ export default function App() {
       setInputVal("");
     } catch (e) {
       setAddErr(e.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // ── Usuń uczestnika ─────────────────────────────────────────────────────────
@@ -687,8 +693,9 @@ export default function App() {
       setPairs(prev => [...prev, ...data]);
     } catch (e) {
       setGenErr(e.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // ── Edytuj wynik ────────────────────────────────────────────────────────────
@@ -706,11 +713,17 @@ export default function App() {
       "Zresetować cały turniej? Usunięte zostaną pary i wszyscy uczestnicy."
     )) return;
     setLoading(true);
-    await apiFetch("/pairs",        { method: "DELETE" });
-    await apiFetch("/participants", { method: "DELETE" });
-    setPairs([]);
-    setParticipants([]);
-    setLoading(false);
+    try {
+      await apiFetch("/pairs",        { method: "DELETE" });
+      await apiFetch("/participants", { method: "DELETE" });
+      setPairs([]);
+      setParticipants([]);
+    } catch (e) {
+      setGenErr(e.message || "Reset nie powiódł się — odśwież i sprawdź stan danych.");
+      await loadData();
+    } finally {
+      setLoading(false);
+    }
   }
 
   // ── Eksport backupu (JSON: uczestnicy + pary) ───────────────────────────────
@@ -858,6 +871,16 @@ export default function App() {
             background:C.panel, border:`1px solid ${C.border}`,
             borderRadius:"0 4px 4px 4px", padding:"20px 16px", minHeight:240,
           }}>
+            {loadErr && (
+              <div style={{
+                background:"rgba(169,50,38,.12)", border:`1px solid ${C.red}`,
+                color:"#e74c3c", borderRadius:4, padding:"8px 12px", fontSize:12, marginBottom:12,
+                display:"flex", justifyContent:"space-between", alignItems:"center", gap:10,
+              }}>
+                <span>Nie udało się wczytać danych: {loadErr}</span>
+                <Btn small variant="ghost" onClick={loadData}>Spróbuj ponownie</Btn>
+              </div>
+            )}
             {dataLoading ? (
               <div style={{display:"flex",justifyContent:"center",padding:40}}>
                 <Spinner />
