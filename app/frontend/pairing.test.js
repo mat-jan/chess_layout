@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateBuergerPairs, scoreFor } from "./App.jsx";
+import { generateBuergerPairs, scoreFor } from "./pairing.js";
 
 function p(id, imie, klasa = "1A") {
   return { id, imie, klasa };

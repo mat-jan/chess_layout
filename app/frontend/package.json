@@ -4,13 +4,14 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev":   "vite",
+    "dev": "vite",
     "build": "vite build",
     "serve": "node serve.js",
-    "test":  "vitest run"
+    "test": "vitest run"
   },
   "dependencies": {
-    "react":     "^18.3.1",
+    "@supabase/supabase-js": "^2.118.0",
+    "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {

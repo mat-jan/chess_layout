@@ -182,3 +182,15 @@ Supabase (Auth + RLS + Edge Function) znajduje się w gałęzi `version_supabase
 objęty tymi poprawkami. `schema.sql` jest zgodny ze zwykłym PostgreSQL (CHECK, indeksy częściowe),
 więc może zostać użyty jako zewnętrzna baza (np. Supabase Postgres przez `DATABASE_URL`);
 przy połączeniu przez pooler (port 6543, tryb transaction) ustaw `DB_STATEMENT_CACHE_SIZE=0` oraz niski `DB_POOL_MAX` (np. 5) w `.env`.
+
+---
+
+## Dwa warianty frontendu
+
+- **Supabase (domyślny, `app/frontend/App.jsx`)** — Auth + Postgres + RLS bezpośrednio z przeglądarki; wymaga w Vercel
+  `VITE_SUPABASE_URL` i `VITE_SUPABASE_ANON_KEY`. Schemat: `app/supabase/schema.sql`,
+  opcjonalna migracja integralności: `app/supabase/001_integrity.sql`, tworzenie kont: Edge Function `create-user`.
+- **VPS/FastAPI (`app/frontend/App.vps.jsx` + `app/backend`)** — w `src/main.jsx` zmień import na `../App.vps.jsx`
+  i ustaw `VITE_API_URL`.
+
+Wspólna logika (parowanie Bergera, punktacja) jest w `app/frontend/pairing.js` i ma testy (`npm test`).
