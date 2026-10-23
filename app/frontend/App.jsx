@@ -558,6 +558,65 @@ function CreateUserPanel() {
   );
 }
 
+// ─── KONTAKT DO DEVELOPERA (nauczyciel / superadmin) ─────────────────────────
+// Wysyła wiadomość przez Edge Function "contact-developer" (webhook Discorda
+// jest sekretem po stronie Supabase, nie trafia do przeglądarki).
+function ContactDeveloperPanel() {
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [msg, setMsg]         = useState("");
+  const [err, setErr]         = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSend() {
+    setErr(""); setMsg("");
+    if (!message.trim()) { setErr("Wpisz wiadomość."); return; }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("contact-developer", {
+        body: { subject, message },
+      });
+      if (error) {
+        let detail = error.message;
+        try { detail = (await error.context.json()).error ?? detail; } catch {}
+        setErr(detail || "Nie udało się wysłać wiadomości");
+      } else if (data?.error) {
+        setErr(data.error);
+      } else {
+        setMsg("Wiadomość wysłana do developera.");
+        setSubject(""); setMessage("");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{
+      background:C.surface, border:`1px solid ${C.border}`,
+      borderRadius:4, padding:14,
+    }}>
+      <div style={{color:C.goldDim,fontWeight:600,marginBottom:10,fontSize:11,letterSpacing:".08em"}}>
+        KONTAKT Z DEVELOPEREM
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <TextInput value={subject} onChange={e=>setSubject(e.target.value)} placeholder="temat (opcjonalnie)" />
+        <textarea
+          value={message} onChange={e=>setMessage(e.target.value)}
+          placeholder="opisz problem lub pomysł…" maxLength={1500} rows={4}
+          style={{
+            background:C.surface, border:`1px solid ${C.border}`, color:C.cream,
+            borderRadius:4, padding:"8px 10px", fontSize:12, resize:"vertical",
+          }}
+        />
+        <Btn small onClick={handleSend} loading={loading}>Wyślij</Btn>
+        <ErrBox msg={err} />
+        {msg && <div style={{color:C.gold,fontSize:11}}>{msg}</div>}
+      </div>
+    </div>
+  );
+}
+
 // ─── GŁÓWNA APLIKACJA ─────────────────────────────────────────────────────────
 export default function App() {
   const [user,         setUser]         = useState(undefined);
@@ -1020,6 +1079,7 @@ export default function App() {
             </div>
 
             {canDelete && <CreateUserPanel />}
+            {canEdit && <ContactDeveloperPanel />}
 
             <div style={{
               background:C.surface, border:`1px solid ${C.border}`,

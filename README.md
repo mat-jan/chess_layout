@@ -20,7 +20,10 @@ app/
 1. **Supabase:** uruchom `app/supabase/schema.sql` w SQL Editor. Pierwszego superadmina utwórz ręcznie
    (Authentication → Users → Add user, potem `insert into public.profiles (id, email, role) values ('<uuid>', '<email>', 'superadmin');`).
 2. **Edge Function:** `supabase functions deploy create-user` (po `supabase link`).
-3. **Vercel:** Root Directory `app/frontend`, zmienne `VITE_SUPABASE_URL` i `VITE_SUPABASE_ANON_KEY`
+3. **Kontakt z developerem (opcjonalnie):** w Discordzie utwórz webhook (Ustawienia kanału → Integracje → Webhooki), potem
+   `supabase secrets set DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."` i `supabase functions deploy contact-developer`.
+   Formularz widzą tylko zalogowani nauczyciele i superadmini; adres webhooka nie trafia do przeglądarki ani do repo.
+4. **Vercel:** Root Directory `app/frontend`, zmienne `VITE_SUPABASE_URL` i `VITE_SUPABASE_ANON_KEY`
    (Production i Preview). Zmienne są wbudowywane w czasie budowania — po zmianie zrób Redeploy.
 
 ## Lokalnie
