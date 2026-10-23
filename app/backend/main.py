@@ -34,12 +34,12 @@ if JWT_SECRET == _INSECURE_DEFAULT_SECRET and os.getenv("ALLOW_INSECURE_JWT_SECR
         "Dla lokalnych testów można obejść to ustawiając ALLOW_INSECURE_JWT_SECRET=1."
     )
 
-# Domyślnie tylko lokalny frontend dev; w produkcji ustaw CORS_ORIGINS jawnie.
-CORS_ORIGINS = [
-    o.strip()
-    for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
-    if o.strip()
-]
+# Domyślnie: lokalny dev + wdrożone frontendy (bez "*"). Nadpisz zmienną CORS_ORIGINS, by zmienić listę.
+_DEFAULT_CORS = (
+    "http://localhost:5173,http://localhost:3000,"
+    "https://turniej.matjan.dev,https://turniej-szachowy.vercel.app"
+)
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", _DEFAULT_CORS).split(",") if o.strip()]
 
 # ─── RATE LIMITING (login brute-force protection) ────────────────────────────
 LOGIN_MAX_ATTEMPTS = 5

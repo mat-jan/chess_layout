@@ -87,3 +87,14 @@ def test_jwt_secret_fails_fast_on_insecure_default(monkeypatch):
     sys.modules.pop("main", None)
     monkeypatch.setenv("ALLOW_INSECURE_JWT_SECRET", "1")
     importlib.import_module("main")
+
+
+def test_cors_default_allows_deployed_frontends_but_not_arbitrary_origins():
+    from fastapi.testclient import TestClient
+    c = TestClient(main.app)
+    hdr = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type"}
+    for origin in ("https://turniej.matjan.dev", "https://turniej-szachowy.vercel.app", "http://localhost:5173"):
+        r = c.options("/auth/login", headers={"Origin": origin, **hdr})
+        assert r.headers.get("access-control-allow-origin") == origin
+    r = c.options("/auth/login", headers={"Origin": "https://evil.example", **hdr})
+    assert r.headers.get("access-control-allow-origin") is None
