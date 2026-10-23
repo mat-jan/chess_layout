@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { generateBuergerPairs, scoreFor } from "./pairing.js";
+import { sendContactMessage } from "./contact.js";
 
 // ─── KONFIGURACJA SUPABASE ─────────────────────────────────────────────────────
 const supabase = createClient(
@@ -559,10 +560,10 @@ function CreateUserPanel() {
 }
 
 // ─── KONTAKT DO DEVELOPERA (nauczyciel / superadmin) ─────────────────────────
-// Wysyła wiadomość bezpośrednio na webhook Discorda (VITE_DISCORD_WEBHOOK_URL).
-// Uwaga: zmienne VITE_* trafiają do kodu strony, więc adres webhooka jest widoczny
+// Wysyła wiadomość bezpośrednio na webhook Discorda (DISCORD_WEBHOOK_URL).
+// Uwaga: zmienne wystawione do Vite (VITE_*, DISCORD_WEBHOOK_URL) trafiają do kodu strony, więc adres webhooka jest widoczny
 // dla każdego, kto otworzy stronę — panel jest ukryty w UI dla gości, ale tego nie wymusza.
-const DISCORD_WEBHOOK = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
+const DISCORD_WEBHOOK = import.meta.env.DISCORD_WEBHOOK_URL;
 const CONTACT_COOLDOWN_MS = 30_000;
 
 function ContactDeveloperPanel({ senderEmail, role }) {
@@ -575,32 +576,13 @@ function ContactDeveloperPanel({ senderEmail, role }) {
 
   async function handleSend() {
     setErr(""); setMsg("");
-    if (!DISCORD_WEBHOOK) { setErr("Kontakt nie jest skonfigurowany."); return; }
     if (!message.trim()) { setErr("Wpisz wiadomość."); return; }
     if (Date.now() - lastSent < CONTACT_COOLDOWN_MS) {
       setErr("Poczekaj chwilę przed wysłaniem kolejnej wiadomości."); return;
     }
     setLoading(true);
     try {
-      const res = await fetch(DISCORD_WEBHOOK, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: "Turniej Szachowy",
-          allowed_mentions: { parse: [] },
-          embeds: [{
-            title: (subject.trim() || "Wiadomość z aplikacji").slice(0, 100),
-            description: message.trim().slice(0, 1500),
-            color: 0xd4af37,
-            fields: [
-              { name: "Od", value: senderEmail || "?", inline: true },
-              { name: "Rola", value: role, inline: true },
-            ],
-            timestamp: new Date().toISOString(),
-          }],
-        }),
-      });
-      if (!res.ok) throw new Error("Discord odrzucił wiadomość (" + res.status + ")");
+      await sendContactMessage(DISCORD_WEBHOOK, { subject, message, senderEmail, role });
       setMsg("Wiadomość wysłana do developera.");
       setSubject(""); setMessage(""); setLastSent(Date.now());
     } catch (e) {

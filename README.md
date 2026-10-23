@@ -21,7 +21,7 @@ app/
    (Authentication → Users → Add user, potem `insert into public.profiles (id, email, role) values ('<uuid>', '<email>', 'superadmin');`).
 2. **Edge Function:** `supabase functions deploy create-user` (po `supabase link`).
 3. **Kontakt z developerem (opcjonalnie):** utwórz webhook w Discordzie (Ustawienia kanału → Integracje → Webhooki) i ustaw go w Vercel jako
-   `VITE_DISCORD_WEBHOOK_URL`. Wiadomość idzie z przeglądarki prosto na Discorda; formularz widzą tylko zalogowani nauczyciele i superadmini,
+   `DISCORD_WEBHOOK_URL`. Wiadomość idzie z przeglądarki prosto na Discorda; formularz widzą tylko zalogowani nauczyciele i superadmini,
    ale adres webhooka jest publiczny w kodzie strony (ukrycie w UI go nie chroni) — przy nadużyciach wygeneruj webhook od nowa.
 4. **Vercel:** Root Directory `app/frontend`, zmienne `VITE_SUPABASE_URL` i `VITE_SUPABASE_ANON_KEY`
    (Production i Preview). Zmienne są wbudowywane w czasie budowania — po zmianie zrób Redeploy.
