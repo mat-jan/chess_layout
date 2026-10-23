@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "serve": "node serve.js",
     "test": "vitest run"
   },
   "dependencies": {
