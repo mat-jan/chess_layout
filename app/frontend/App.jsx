@@ -120,6 +120,20 @@ export function generateBuergerPairs(participants, round) {
   });
 }
 
+export function scoreFor(p, pairs) {
+  let pts = 0;
+  pairs.forEach(pair => {
+    const isW = pair.white_id === p.id;
+    const isB = pair.black_id === p.id;
+    if (!isW && !isB) return;
+    if (pair.result==="1-0")       pts += isW ? 1 : 0;
+    if (pair.result==="0-1")       pts += isB ? 1 : 0;
+    if (pair.result==="0.5-0.5")   pts += .5;
+    if (pair.result==="wolny los" && !pair.black_id) pts += 1;
+  });
+  return pts;
+}
+
 function downloadJSON(filename, data) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url  = URL.createObjectURL(blob);
@@ -419,19 +433,7 @@ function Scoreboard({ participants, pairs }) {
     </div>
   );
 
-  const scoreOf = p => {
-    let pts = 0;
-    pairs.forEach(pair => {
-      const isW = pair.white_id === p.id;
-      const isB = pair.black_id === p.id;
-      if (!isW && !isB) return;
-      if (pair.result==="1-0")       pts += isW ? 1 : 0;
-      if (pair.result==="0-1")       pts += isB ? 1 : 0;
-      if (pair.result==="0.5-0.5")   pts += .5;
-      if (pair.result==="wolny los" && isW && !pair.black_id) pts += 1;
-    });
-    return pts;
-  };
+  const scoreOf = p => scoreFor(p, pairs);
 
   const ranked = [...participants]
     .map(p=>({...p, pts:scoreOf(p)}))
@@ -683,6 +685,12 @@ export default function App() {
   async function handleGenerate() {
     setGenErr("");
     if (participants.length < 2) { setGenErr("Minimum 2 uczestników."); return; }
+    // Harmonogram Bergera zakłada stały skład — zmiana listy po rundzie 1 psuje unikanie powtórzeń i rozkład wolnych losów.
+    const firstPairAt = pairs.reduce((m, p) => (p.created_at && (!m || p.created_at < m) ? p.created_at : m), null);
+    if (firstPairAt && participants.some(p => p.created_at && p.created_at > firstPairAt)) {
+      const ok = window.confirm("Lista uczestników zmieniła się po wygenerowaniu pierwszej rundy. Kolejne pary mogą się powtarzać lub pomijać wolne losy. Kontynuować?");
+      if (!ok) return;
+    }
     const newPairs = generateBuergerPairs(participants, nextRound);
     setLoading(true);
     try {

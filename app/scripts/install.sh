@@ -28,6 +28,12 @@ apt-get install -y -qq \
     > /dev/null
 ok "Pakiety zainstalowane"
 
+# Vite 5 wymaga Node >= 18; domyślne repozytoria Ubuntu często mają starszą wersję
+NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
+if [[ "$NODE_MAJOR" -lt 18 ]]; then
+    err "Wykryto Node.js < 18 (v$(node -v 2>/dev/null)). Zainstaluj Node 18+ (np. NodeSource: https://github.com/nodesource/distributions) i uruchom ponownie."
+fi
+
 # ─── 2. UŻYTKOWNIK SYSTEMOWY ─────────────────────────────────────────────────
 if ! id -u chess &>/dev/null; then
     useradd -m -s /bin/bash chess

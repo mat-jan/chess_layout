@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateBuergerPairs } from "./App.jsx";
+import { generateBuergerPairs, scoreFor } from "./App.jsx";
 
 function p(id, imie, klasa = "1A") {
   return { id, imie, klasa };
@@ -47,5 +47,19 @@ describe("generateBuergerPairs", () => {
     const flat = seenPerRound.flatMap(s => [...s]);
     const asSet = new Set(flat);
     expect(asSet.size).toBe(flat.length);
+  });
+});
+
+describe("scoreFor", () => {
+  const a = { id: 1 }, b = { id: 2 };
+  it("scores wins, draws and byes regardless of bye side", () => {
+    const pairs = [
+      { white_id: 1, black_id: 2, result: "1-0" },
+      { white_id: 1, black_id: 2, result: "0.5-0.5" },
+      { white_id: 1, black_id: null, result: "wolny los" },
+    ];
+    expect(scoreFor(a, pairs)).toBe(2.5);
+    expect(scoreFor(b, pairs)).toBe(0.5);
+    expect(scoreFor(b, [{ white_id: 3, black_id: null, result: "wolny los" }])).toBe(0);
   });
 });

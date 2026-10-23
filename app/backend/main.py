@@ -34,7 +34,12 @@ if JWT_SECRET == _INSECURE_DEFAULT_SECRET and os.getenv("ALLOW_INSECURE_JWT_SECR
         "Dla lokalnych testów można obejść to ustawiając ALLOW_INSECURE_JWT_SECRET=1."
     )
 
-CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
+# Domyślnie tylko lokalny frontend dev; w produkcji ustaw CORS_ORIGINS jawnie.
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+    if o.strip()
+]
 
 # ─── RATE LIMITING (login brute-force protection) ────────────────────────────
 LOGIN_MAX_ATTEMPTS = 5
@@ -43,6 +48,9 @@ _login_attempts: dict[str, list[float]] = {}
 
 def _check_login_rate_limit(key: str):
     now = time.time()
+    if len(_login_attempts) > 10_000:  # ogranicz zużycie pamięci przy atakach z wielu kluczy
+        for k in [k for k, v in _login_attempts.items() if not v or now - v[-1] >= LOGIN_WINDOW_SECONDS]:
+            del _login_attempts[k]
     attempts = [t for t in _login_attempts.get(key, []) if now - t < LOGIN_WINDOW_SECONDS]
     if len(attempts) >= LOGIN_MAX_ATTEMPTS:
         raise HTTPException(
@@ -63,7 +71,13 @@ pool: asyncpg.Pool = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global pool
-    pool = await asyncpg.create_pool(DB_URL, min_size=2, max_size=10)
+    pool = await asyncpg.create_pool(
+        DB_URL,
+        min_size=int(os.getenv("DB_POOL_MIN", "1")),
+        max_size=int(os.getenv("DB_POOL_MAX", "10")),
+        # poolery w trybie transaction (np. Supabase :6543) nie wspierają prepared statements → ustaw 0
+        statement_cache_size=int(os.getenv("DB_STATEMENT_CACHE_SIZE", "100")),
+    )
     yield
     await pool.close()
 
@@ -146,6 +160,24 @@ class UserCreate(BaseModel):
             raise ValueError("Hasło musi mieć min. 8 znaków.")
         return v
 
+def _validate_round_pairs(pairs: list[PairCreate]):
+    """Każdy zawodnik może wystąpić w danej rundzie tylko raz (jako biały LUB czarny)."""
+    seen: set[tuple[int, int]] = set()
+    for p in pairs:
+        if p.black_id is not None and p.black_id == p.white_id:
+            raise HTTPException(status_code=422, detail="Zawodnik nie może grać sam ze sobą.")
+        if p.black_id is None and p.result not in ("wolny los", ""):
+            raise HTTPException(status_code=422, detail="Para bez przeciwnika może mieć tylko wynik 'wolny los'.")
+        for pid in (p.white_id, p.black_id):
+            if pid is None:
+                continue
+            if (p.round_number, pid) in seen:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Zawodnik {pid} występuje wielokrotnie w rundzie {p.round_number}.",
+                )
+            seen.add((p.round_number, pid))
+
 # ─── AUTH ────────────────────────────────────────────────────────────────────
 @app.post("/auth/login")
 async def login(body: LoginRequest, request: Request):
@@ -204,8 +236,9 @@ async def delete_user(user_id: int, _=Depends(require_superadmin)):
         async with conn.transaction():
             target = await conn.fetchrow("SELECT role FROM users WHERE id = $1", user_id)
             if target and target["role"] == "superadmin":
-                count = await conn.fetchval("SELECT count(*) FROM users WHERE role = 'superadmin'")
-                if count <= 1:
+                # FOR UPDATE serializuje równoległe usuwania ostatnich superadminów
+                admins = await conn.fetch("SELECT id FROM users WHERE role = 'superadmin' FOR UPDATE")
+                if len(admins) <= 1:
                     raise HTTPException(
                         status_code=409,
                         detail="Nie można usunąć ostatniego konta superadmina.",
@@ -247,16 +280,30 @@ async def get_pairs():
 
 @app.post("/pairs", status_code=201)
 async def insert_pairs(body: PairsInsert, _=Depends(require_teacher)):
+    _validate_round_pairs(body.pairs)
     async with pool.acquire() as conn:
         async with conn.transaction():
             inserted = []
             for p in body.pairs:
+                clash = await conn.fetchval(
+                    """SELECT 1 FROM pairs WHERE round_number = $1
+                       AND (white_id = ANY($2::int[]) OR black_id = ANY($2::int[])) LIMIT 1""",
+                    p.round_number, [i for i in (p.white_id, p.black_id) if i is not None],
+                )
+                if clash:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Zawodnik z pary w rundzie {p.round_number} już ma przydzieloną parę "
+                               f"(możliwe podwójne wygenerowanie).",
+                    )
                 try:
                     row = await conn.fetchrow(
                         """INSERT INTO pairs (round_number, white_id, black_id, result)
                            VALUES ($1,$2,$3,$4) RETURNING *""",
                         p.round_number, p.white_id, p.black_id, p.result
                     )
+                except asyncpg.ForeignKeyViolationError:
+                    raise HTTPException(status_code=422, detail="Nieznany zawodnik (mógł zostać usunięty).")
                 except asyncpg.UniqueViolationError:
                     raise HTTPException(
                         status_code=409,
