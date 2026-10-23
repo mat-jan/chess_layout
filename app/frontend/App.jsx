@@ -88,7 +88,7 @@ const C = {
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-function generateBuergerPairs(participants, round) {
+export function generateBuergerPairs(participants, round) {
   const sorted = [...participants].sort((a, b) =>
     a.imie.localeCompare(b.imie, "pl")
   );
@@ -118,6 +118,20 @@ function generateBuergerPairs(participants, round) {
     if (black === null) return { round_number: round, white_id: white.id, black_id: null, result: "wolny los" };
     return { round_number: round, white_id: white.id, black_id: black.id, result: "" };
   });
+}
+
+export function scoreFor(p, pairs) {
+  let pts = 0;
+  pairs.forEach(pair => {
+    const isW = pair.white_id === p.id;
+    const isB = pair.black_id === p.id;
+    if (!isW && !isB) return;
+    if (pair.result==="1-0")       pts += isW ? 1 : 0;
+    if (pair.result==="0-1")       pts += isB ? 1 : 0;
+    if (pair.result==="0.5-0.5")   pts += .5;
+    if (pair.result==="wolny los" && !pair.black_id) pts += 1;
+  });
+  return pts;
 }
 
 function downloadJSON(filename, data) {
@@ -419,19 +433,7 @@ function Scoreboard({ participants, pairs }) {
     </div>
   );
 
-  const scoreOf = p => {
-    let pts = 0;
-    pairs.forEach(pair => {
-      const isW = pair.white_id === p.id;
-      const isB = pair.black_id === p.id;
-      if (!isW && !isB) return;
-      if (pair.result==="1-0")       pts += isW ? 1 : 0;
-      if (pair.result==="0-1")       pts += isB ? 1 : 0;
-      if (pair.result==="0.5-0.5")   pts += .5;
-      if (pair.result==="wolny los" && isW && !pair.black_id) pts += 1;
-    });
-    return pts;
-  };
+  const scoreOf = p => scoreFor(p, pairs);
 
   const ranked = [...participants]
     .map(p=>({...p, pts:scoreOf(p)}))
@@ -576,6 +578,7 @@ export default function App() {
   const [tab,          setTab]          = useState("pairs");
   const [loading,      setLoading]      = useState(false);
   const [dataLoading,  setDataLoading]  = useState(false);
+  const [loadErr,      setLoadErr]      = useState("");
   const [backupErr,    setBackupErr]    = useState("");
   const [backupMsg,    setBackupMsg]    = useState("");
   const [importing,    setImporting]    = useState(false);
@@ -590,6 +593,7 @@ export default function App() {
   // ── Wczytaj dane ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setDataLoading(true);
+    setLoadErr("");
     try {
       const [prt, prs] = await Promise.all([
         apiFetch("/participants"),
@@ -597,8 +601,11 @@ export default function App() {
       ]);
       setParticipants(prt ?? []);
       setPairs(prs ?? []);
-    } catch (_) {}
-    setDataLoading(false);
+    } catch (e) {
+      setLoadErr(e.message || "Nie udało się wczytać danych turnieju.");
+    } finally {
+      setDataLoading(false);
+    }
   }, []);
 
   // ── Sprawdź zapisany token ───────────────────────────────────────────────
@@ -663,8 +670,9 @@ export default function App() {
       setInputVal("");
     } catch (e) {
       setAddErr(e.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // ── Usuń uczestnika ─────────────────────────────────────────────────────────
@@ -677,6 +685,12 @@ export default function App() {
   async function handleGenerate() {
     setGenErr("");
     if (participants.length < 2) { setGenErr("Minimum 2 uczestników."); return; }
+    // Harmonogram Bergera zakłada stały skład — zmiana listy po rundzie 1 psuje unikanie powtórzeń i rozkład wolnych losów.
+    const firstPairAt = pairs.reduce((m, p) => (p.created_at && (!m || p.created_at < m) ? p.created_at : m), null);
+    if (firstPairAt && participants.some(p => p.created_at && p.created_at > firstPairAt)) {
+      const ok = window.confirm("Lista uczestników zmieniła się po wygenerowaniu pierwszej rundy. Kolejne pary mogą się powtarzać lub pomijać wolne losy. Kontynuować?");
+      if (!ok) return;
+    }
     const newPairs = generateBuergerPairs(participants, nextRound);
     setLoading(true);
     try {
@@ -687,8 +701,9 @@ export default function App() {
       setPairs(prev => [...prev, ...data]);
     } catch (e) {
       setGenErr(e.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // ── Edytuj wynik ────────────────────────────────────────────────────────────
@@ -706,11 +721,17 @@ export default function App() {
       "Zresetować cały turniej? Usunięte zostaną pary i wszyscy uczestnicy."
     )) return;
     setLoading(true);
-    await apiFetch("/pairs",        { method: "DELETE" });
-    await apiFetch("/participants", { method: "DELETE" });
-    setPairs([]);
-    setParticipants([]);
-    setLoading(false);
+    try {
+      await apiFetch("/pairs",        { method: "DELETE" });
+      await apiFetch("/participants", { method: "DELETE" });
+      setPairs([]);
+      setParticipants([]);
+    } catch (e) {
+      setGenErr(e.message || "Reset nie powiódł się — odśwież i sprawdź stan danych.");
+      await loadData();
+    } finally {
+      setLoading(false);
+    }
   }
 
   // ── Eksport backupu (JSON: uczestnicy + pary) ───────────────────────────────
@@ -858,6 +879,16 @@ export default function App() {
             background:C.panel, border:`1px solid ${C.border}`,
             borderRadius:"0 4px 4px 4px", padding:"20px 16px", minHeight:240,
           }}>
+            {loadErr && (
+              <div style={{
+                background:"rgba(169,50,38,.12)", border:`1px solid ${C.red}`,
+                color:"#e74c3c", borderRadius:4, padding:"8px 12px", fontSize:12, marginBottom:12,
+                display:"flex", justifyContent:"space-between", alignItems:"center", gap:10,
+              }}>
+                <span>Nie udało się wczytać danych: {loadErr}</span>
+                <Btn small variant="ghost" onClick={loadData}>Spróbuj ponownie</Btn>
+              </div>
+            )}
             {dataLoading ? (
               <div style={{display:"flex",justifyContent:"center",padding:40}}>
                 <Spinner />

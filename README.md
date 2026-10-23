@@ -163,3 +163,22 @@ http://TWOJ_IP:8000/docs
 PL: Ten projekt jest udostępniony na podstawie **Licencji Użytkowania Ograniczonego** wyłącznie do celów edukacyjnych. Jest on przeznaczony do wyłącznego użytku przez **XII Liceum Ogólnokształcące im. Henryka Sienkiewicza w Warszawie**. Wykorzystanie komercyjne jest zabronione. Szczegóły znajdują się w pliku [LICENSE](LICENSE).
 
 EN: This project is released under a **Limited Use License** for educational purposes. It is strictly for the use of **XII Liceum Ogólnokształcące im. Henryka Sienkiewicza in Warsaw**. Commercial use is prohibited. Please refer to the [LICENSE](LICENSE) file for details.
+---
+
+## Testy
+
+```bash
+# Backend (testy integracyjne wymagają Postgresa; bez TEST_DATABASE_URL są pomijane)
+cd app/backend && pip install -r requirements-dev.txt
+TEST_DATABASE_URL=postgresql://chess:pw@localhost:55432/chess_db ALLOW_INSECURE_JWT_SECRET=1 pytest
+# Frontend
+cd app/frontend && npm ci && npm test && npm run build
+```
+
+## Uwagi dot. Supabase
+
+Ta gałąź to wariant VPS (FastAPI + własny Postgres). Supabase nie hostuje FastAPI — wariant
+Supabase (Auth + RLS + Edge Function) znajduje się w gałęzi `version_supabase` i nie jest
+objęty tymi poprawkami. `schema.sql` jest zgodny ze zwykłym PostgreSQL (CHECK, indeksy częściowe),
+więc może zostać użyty jako zewnętrzna baza (np. Supabase Postgres przez `DATABASE_URL`);
+przy połączeniu przez pooler (port 6543, tryb transaction) ustaw `DB_STATEMENT_CACHE_SIZE=0` oraz niski `DB_POOL_MAX` (np. 5) w `.env`.
