@@ -10,11 +10,15 @@ Są trzy role: gość (tylko podgląd), nauczyciel (dodaje uczestników, generuj
 
 ## 2. Jak to wygląda
 
-Zrzuty pochodzą z działającej aplikacji uruchomionej lokalnie, z danymi demonstracyjnymi (osiem fikcyjnych osób). Zamiast prawdziwego Supabase odpowiadała atrapa API, więc nie ma na nich żadnych prawdziwych danych. Czcionki z Google Fonts nie były ładowane, dlatego krój pisma różni się od produkcyjnego. Dwa symbole przy przyciskach backupu wyświetlają się jako puste ramki, bo przeglądarka bez interfejsu nie miała do nich glifów.
+Zrzuty zrobiłem z kodu z gałęzi `main`, uruchomionego lokalnie na prawdziwym stosie Supabase (Postgres z `schema.sql` i `001_integrity.sql`, Supabase Auth, PostgREST z włączonym RLS), bez żadnej atrapy. Dane to osiem fikcyjnych osób, a konta demonstracyjne istniały tylko w tej lokalnej bazie. Uczestników, pary i wyniki wpisałem przez interfejs, tak jak zrobiłby to nauczyciel. Pominąłem zrzut wysyłki formularza kontaktowego i tworzenia konta (patrz „Ograniczenia”). Dwa symbole przy przyciskach backupu wyświetlają się jako puste ramki, bo przeglądarka bez interfejsu nie miała do nich glifów.
 
 ![Ekran logowania](docs/img/01-logowanie.png)
 
 *Ekran logowania: login, hasło i przycisk wejścia jako gość.*
+
+![Błędne hasło](docs/img/01b-logowanie-blad.png)
+
+*Błędne hasło: odpowiedź Supabase Auth jest tłumaczona na „Nieprawidłowy login lub hasło”.*
 
 ![Widok gościa, pary](docs/img/02-gosc-pary-pc.png)
 
@@ -119,7 +123,7 @@ Parowanie działa tak: uczestnicy sortowani alfabetycznie, pierwszy zostaje na m
 
 ## 5. Bezpieczeństwo
 
-Poniżej tylko to, co wynika z kodu i skryptów SQL w repozytorium. Polityk nie sprawdzałem na działającej bazie Supabase.
+Poniżej tylko to, co wynika z kodu i skryptów SQL w repozytorium. Zachowanie polityk RLS i ograniczeń sprawdziłem zapytaniami do lokalnej bazy Supabase z tym samym schematem (patrz sekcja 7). Produkcyjnej bazy nie dotykałem.
 
 | Zagrożenie | Zabezpieczenie |
 |---|---|
@@ -137,7 +141,7 @@ Zależności produkcyjne: `npm audit --omit=dev` nie znalazł podatności. Pełn
 
 ## 6. Środowiska i wdrożenie
 
-Produkcyjnie aplikacja stoi na Vercelu z katalogiem głównym `app/frontend`. Potrzebne zmienne: `VITE_SUPABASE_URL` i `VITE_SUPABASE_ANON_KEY` (wbudowywane w czasie budowania, po zmianie trzeba przebudować) oraz opcjonalnie `DISCORD_WEBHOOK_URL`.
+Produkcyjnie aplikacja (gałąź `main`) stoi na Vercelu i Supabase z katalogiem głównym `app/frontend`. Potrzebne zmienne: `VITE_SUPABASE_URL` i `VITE_SUPABASE_ANON_KEY` (wbudowywane w czasie budowania, po zmianie trzeba przebudować) oraz opcjonalnie `DISCORD_WEBHOOK_URL`.
 
 Kroki konfiguracji bazy opisuje README: uruchomić `schema.sql` w SQL Editorze Supabase, ręcznie założyć pierwszego superadmina (użytkownik w Auth plus wiersz w `profiles`), wdrożyć funkcję `supabase functions deploy create-user`, opcjonalnie uruchomić `001_integrity.sql`.
 
@@ -166,10 +170,25 @@ Uruchomiłem `npx vitest run` w katalogu `app/frontend`. Wynik: 2 pliki, 9 test�
 
 Zbudowanie aplikacji (`vite build`) przeszło bez błędów.
 
+Osobno sprawdziłem ręcznie, zapytaniami HTTP do lokalnego Supabase (konta demonstracyjne `teacher` i `superadmin`), jak zachowuje się baza. To nie są testy automatyczne w repozytorium.
+
+| Próba | Wynik |
+|---|---|
+| Gość dodaje uczestnika | odrzucone (401) |
+| Nauczyciel dodaje uczestnika | przyjęte (201) |
+| Nauczyciel kasuje uczestników | nic nie usunięto (0 wierszy) |
+| Nauczyciel zmienia sobie rolę na superadmin | nic nie zmieniono (0 wierszy) |
+| Gość czyta `profiles` | pusta lista |
+| Nauczyciel czyta `profiles` | widzi tylko własny wiersz |
+| Gość czyta `participants` | dane widoczne |
+| Para z wynikiem `xyz` (po migracji `001_integrity.sql`) | odrzucona przez ograniczenie `pairs_result_valid` |
+| Logowanie w interfejsie, dodanie 8 uczestników, dwie rundy, wpisanie wyników | działa, wyniki zapisane w bazie |
+
 ## 8. Ograniczenia i dalszy rozwój
 
-- Polityk RLS, migracji i Edge Function nie uruchamiałem na prawdziwym Supabase. Opis bezpieczeństwa opiera się na czytaniu kodu SQL i TypeScript.
-- Zrzuty pochodzą z atrapy API, więc pokazują interfejs, ale nie potwierdzają działania z prawdziwą bazą. Nie testowałem na prawdziwym telefonie, tylko w oknie przeglądarki o szerokości 390 px.
+- Edge Function `create-user` nie została uruchomiona. Lokalnemu środowisku Docker zabrakło miejsca na obraz edge-runtime, więc tworzenie kont i jego zabezpieczenia znam tylko z czytania kodu.
+- Sprawdzałem lokalną kopię Supabase (ten sam schemat i migracje), a nie produkcyjny projekt na Vercelu i Supabase. Ustawienia produkcyjne (np. czy migracja `001_integrity.sql` jest tam wgrana, konfiguracja Auth) mogą się różnić.
+- Nie testowałem na prawdziwym telefonie, tylko w oknie przeglądarki o szerokości 390 px. Formularz kontaktowy nie był uruchamiany, bo lokalnie nie ma webhooka.
 - Adres webhooka Discorda trafia do kodu strony (zmienna jest wystawiona przez Vite), więc każdy, kto otworzy stronę, może go odczytać i wysyłać na niego wiadomości. Ukrycie formularza dla gości tego nie zmienia. Odstęp 30 s jest sprawdzany tylko w przeglądarce. W razie nadużyć trzeba wygenerować webhook od nowa.
 - Migracja `001_integrity.sql` jest opcjonalna. Bez niej baza nie blokuje duplikatów par ani niepoprawnych wartości wyniku, a numer rundy liczy przeglądarka, więc dwóch nauczycieli generujących pary jednocześnie może dostać zdublowaną rundę.
 - Tryb gościa działa tylko w przeglądarce, ale dane i tak są publiczne: polityki `select` pozwalają czytać uczestników i pary każdemu, kto ma klucz `anon`.
