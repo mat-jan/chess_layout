@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Turniej Szachowy – dokumentacja</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1d1b;--mut:#6b675e;--line:#dedad0;--acc:#8a6d12;--code:#f1eee6}
+@media(prefers-color-scheme:dark){:root{--bg:#16150f;--fg:#e6e2d6;--mut:#98927f;--line:#37342a;--acc:#d4af37;--code:#201e16}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--acc)}
+header,footer{max-width:60rem;margin:0 auto;padding:1.2rem 1rem;display:flex;gap:1rem;flex-wrap:wrap;justify-content:space-between;align-items:baseline}
+header{border-bottom:1px solid var(--line)} footer{border-top:1px solid var(--line);margin-top:3rem;font-size:.9rem;color:var(--mut)}
+header strong{font-size:1.05rem} nav.links a{margin-left:1rem}
+.wrap{max-width:60rem;margin:0 auto;padding:0 1rem;display:flex;gap:3rem;align-items:flex-start}
+aside{position:sticky;top:1rem;width:13rem;flex:none;font-size:.9rem;padding-top:2rem}
+aside ol{list-style:none;margin:0;padding:0} aside li{margin:.35rem 0} aside a{text-decoration:none;color:var(--mut)} aside a:hover{color:var(--acc)}
+main{max-width:46rem;min-width:0;flex:1}
+h1{font-size:2rem;line-height:1.2;margin:2rem 0 1rem} h2{font-size:1.4rem;margin:2.6rem 0 .6rem;padding-top:.4rem;border-top:1px solid var(--line)} h3{font-size:1.1rem;margin:1.6rem 0 .3rem}
+p,li{overflow-wrap:anywhere}
+code{background:var(--code);padding:.08em .3em;border-radius:3px;font:.88em ui-monospace,Menlo,Consolas,monospace}
+pre{background:var(--code);padding:.9rem 1rem;border-radius:4px;overflow-x:auto;font-size:.85rem;line-height:1.45} pre code{padding:0;background:none}
+.tw{overflow-x:auto;margin:1rem 0} table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;vertical-align:top;padding:.45rem .6rem;border-bottom:1px solid var(--line)} th{border-bottom:2px solid var(--line);color:var(--mut);font-weight:600}
+figure{margin:1.6rem 0} figure img{max-width:100%;height:auto;border:1px solid var(--line);border-radius:3px;display:block}
+figure.pair{} figure.pair img{display:inline-block;width:calc(50% - .4rem);vertical-align:top} figure.pair img+img{margin-left:.6rem}
+figure.pair img{max-height:none}
+figcaption{font-size:.88rem;color:var(--mut);font-style:italic;margin-top:.45rem}
+@media(max-width:860px){aside{display:none} .wrap{display:block} h1{font-size:1.6rem}}
+</style></head><body>
+<header><strong>Turniej Szachowy – dokumentacja</strong><nav class="links"><a href="https://github.com/mat-jan/chess_layout">Kod na GitHubie</a><a href="dokumentacja.docx">Pobierz (Word)</a></nav></header>
+<div class="wrap"><aside><ol><li><a href="#1-do-czego-to-sluzy">1. Do czego to służy</a></li><li><a href="#2-jak-to-wyglada">2. Jak to wygląda</a></li><li><a href="#3-jak-z-tego-korzystac">3. Jak z tego korzystać</a></li><li><a href="#4-jak-to-jest-zbudowane">4. Jak to jest zbudowane</a></li><li><a href="#5-bezpieczenstwo">5. Bezpieczeństwo</a></li><li><a href="#6-srodowiska-i-wdrozenie">6. Środowiska i wdrożenie</a></li><li><a href="#7-testy">7. Testy</a></li><li><a href="#8-ograniczenia-i-dalszy-rozwoj">8. Ograniczenia i dalszy rozwój</a></li></ol></aside><main><h1>Turniej Szachowy – dokumentacja</h1>
+<p>Aplikacja webowa do prowadzenia szkolnego turnieju szachowego: lista uczestników, losowanie par metodą Buergera, wpisywanie wyników i klasyfikacja. Powstała dla XII LO im. H. Sienkiewicza w Warszawie (nazwa szkoły jest wpisana na stałe w interfejsie).</p>
+<h2 id="1-do-czego-to-sluzy">1. Do czego to służy</h2>
+<p>Organizator dodaje uczestników w formacie <code>imie_klasa</code>, generuje pary na kolejną rundę i wpisuje wyniki partii. Aplikacja liczy punkty i pokazuje klasyfikację. Uczeń lub rodzic wchodzi jako gość, bez konta, i widzi pary, wyniki i klasyfikację tylko do odczytu.</p>
+<p>Są trzy role: gość (tylko podgląd), nauczyciel (dodaje uczestników, generuje pary, wpisuje wyniki) i superadmin (dodatkowo usuwa uczestników, resetuje turniej i zakłada konta). Dane trzyma Supabase (Postgres z uprawnieniami na poziomie wierszy), a frontend działa w całości w przeglądarce.</p>
+<h2 id="2-jak-to-wyglada">2. Jak to wygląda</h2>
+<p>Zrzuty pochodzą z działającej aplikacji uruchomionej lokalnie, z danymi demonstracyjnymi (osiem fikcyjnych osób). Zamiast prawdziwego Supabase odpowiadała atrapa API, więc nie ma na nich żadnych prawdziwych danych. Czcionki z Google Fonts nie były ładowane, dlatego krój pisma różni się od produkcyjnego. Dwa symbole przy przyciskach backupu wyświetlają się jako puste ramki, bo przeglądarka bez interfejsu nie miała do nich glifów.</p>
+<figure class="single"><img src="img/01-logowanie.png" alt="Ekran logowania"><figcaption>Ekran logowania: login, hasło i przycisk wejścia jako gość.</figcaption></figure>
+<figure class="single"><img src="img/02-gosc-pary-pc.png" alt="Widok gościa, pary"><figcaption>Gość widzi pary rund 1 i 2 oraz wpisane wyniki, bez żadnych pól do edycji.</figcaption></figure>
+<figure class="single"><img src="img/03-gosc-klasyfikacja-pc.png" alt="Widok gościa, klasyfikacja"><figcaption>Zakładka „Klasyfikacja”: miejsce, zawodnik, klasa i punkty.</figcaption></figure>
+<figure class="single"><img src="img/04-nauczyciel-pc.png" alt="Widok nauczyciela"><figcaption>Nauczyciel ma listy wyboru wyniku przy każdej parze oraz panel zarządzania po prawej.</figcaption></figure>
+<figure class="single"><img src="img/05-blad-formatu.png" alt="Błąd formatu"><figcaption>Wpisanie „zle dane” w polu uczestnika kończy się komunikatem o wymaganym formacie.</figcaption></figure>
+<figure class="single"><img src="img/06-filtr-uczestnikow-pc.png" alt="Filtrowanie uczestników"><figcaption>Po wpisaniu „3a” na liście uczestników zostają tylko osoby z klasy 3A.</figcaption></figure>
+<figure class="single"><img src="img/07-superadmin-pc.png" alt="Widok superadmina"><figcaption>Superadmin dodatkowo widzi przycisk resetu, krzyżyki przy uczestnikach i formularz nowego konta.</figcaption></figure>
+<p>Widok na telefonie (szerokość 390 px):</p>
+<figure class="pair"><img src="img/08-logowanie-tel.png" alt="Logowanie na telefonie"><img src="img/09-gosc-pary-tel.png" alt="Pary na telefonie"><figcaption>Po lewej logowanie, po prawej widok gościa z parami.</figcaption></figure>
+<figure class="pair"><img src="img/10-gosc-klasyfikacja-tel.png" alt="Klasyfikacja na telefonie"><img src="img/11-nauczyciel-tel.png" alt="Nauczyciel na telefonie"><figcaption>Po lewej klasyfikacja, po prawej widok nauczyciela, w którym panel zarządzania leży pod tabelami.</figcaption></figure>
+<h2 id="3-jak-z-tego-korzystac">3. Jak z tego korzystać</h2>
+<h3 id="gosc">Gość</h3>
+<p>Na ekranie logowania kliknij „Kontynuuj jako gość”. Zakładka „Pary i wyniki” pokazuje rundy po kolei, zakładka „Klasyfikacja” ranking. Przycisk „Zaloguj” w nagłówku wraca do logowania.</p>
+<h3 id="nauczyciel-i-superadmin">Nauczyciel i superadmin</h3>
+<p>Wpisz login (w praktyce adres e-mail konta) i hasło. Po zalogowaniu pojawia się panel zarządzania.</p>
+<ol><li>Dodaj uczestników w polu „Dodaj uczestnika”, w formacie <code>imie_klasa</code>, np. <code>jan_1B</code>. Klasa to część po ostatnim znaku <code>_</code>.</li><li>Gdy jest co najmniej dwóch uczestników, kliknij „Generuj pary”. Numer rundy to największy dotychczasowy numer plus jeden.</li><li>Wybierz wynik z listy przy każdej parze. Zapisuje się od razu po wybraniu.</li><li>Wyniki widać w zakładce „Klasyfikacja”.</li></ol>
+<p>Wyniki do wyboru: <code>1-0</code> (wygrały białe), <code>0-1</code> (wygrały czarne), <code>0.5-0.5</code> (remis), <code>wolny los</code> oraz puste. Wolny los daje 1 punkt, a remis po pół punktu każdemu.</p>
+<p>Backup: „Eksportuj backup (JSON)” pobiera plik z uczestnikami i parami. „Importuj backup” dodaje zawartość pliku do istniejących danych, niczego nie kasuje, i przed importem pyta o potwierdzenie.</p>
+<p>Lista uczestników ma szukajkę (po imieniu lub klasie) i sortowanie po imieniu albo klasie.</p>
+<p>Tylko superadmin: usuwanie uczestników krzyżykiem, „Reset turnieju” (kasuje wszystkie pary i wszystkich uczestników, po potwierdzeniu) oraz „Nowe konto”.</p>
+<div class="tw"><table><thead><tr><th>Formularz</th><th>Pole</th><th>Opis</th></tr></thead><tbody><tr><td>Logowanie</td><td>Login</td><td>adres e-mail konta w Supabase Auth</td></tr><tr><td>Logowanie</td><td>Hasło</td><td>hasło konta</td></tr><tr><td>Dodaj uczestnika</td><td>imie_klasa</td><td>tekst w formacie <code>imie_klasa</code>, np. <code>jan_1B</code></td></tr><tr><td>Nowe konto</td><td>login (e-mail)</td><td>adres e-mail nowego konta</td></tr><tr><td>Nowe konto</td><td>hasło</td><td>co najmniej 8 znaków</td></tr><tr><td>Nowe konto</td><td>rola</td><td><code>teacher</code> lub <code>superadmin</code></td></tr><tr><td>Kontakt z developerem</td><td>temat</td><td>opcjonalny, obcinany do 100 znaków</td></tr><tr><td>Kontakt z developerem</td><td>wiadomość</td><td>wymagana, do 1500 znaków (limit w polu)</td></tr></tbody></table></div>
+<p>Formularz „Kontakt z developerem” widzą nauczyciele i superadmini. Wysyła wiadomość na webhook Discorda skonfigurowany przy wdrożeniu. W aplikacji jest odstęp 30 sekund między wiadomościami.</p>
+<h2 id="4-jak-to-jest-zbudowane">4. Jak to jest zbudowane</h2>
+<pre><code>Przeglądarka (React + Vite)
+   |-- odczyt/zapis tabel ----------&gt; Supabase (PostgREST + RLS)
+   |-- logowanie -------------------&gt; Supabase Auth
+   |-- tworzenie kont --------------&gt; Edge Function create-user (service_role)
+   |-- kontakt ---------------------&gt; webhook Discorda</code></pre>
+<div class="tw"><table><thead><tr><th>Warstwa</th><th>Technologia</th></tr></thead><tbody><tr><td>Frontend</td><td>React 18, Vite 5, jeden plik <code>App.jsx</code> ze stylami w kodzie</td></tr><tr><td>Dane i logowanie</td><td>Supabase (Postgres, Auth, Row Level Security), klient <code>@supabase/supabase-js</code></td></tr><tr><td>Tworzenie kont</td><td>Edge Function <code>create-user</code> (Deno, TypeScript)</td></tr><tr><td>Parowanie</td><td><code>pairing.js</code>, czyste funkcje bez zależności</td></tr><tr><td>Testy</td><td>Vitest</td></tr><tr><td>Hosting</td><td>Vercel (według README)</td></tr></tbody></table></div>
+<p>Logika parowania i liczenia punktów jest w <code>app/frontend/pairing.js</code>, formularz kontaktowy w <code>contact.js</code>, schemat bazy w <code>app/supabase/schema.sql</code>.</p>
+<p>Model danych:</p>
+<div class="tw"><table><thead><tr><th>Tabela</th><th>Kolumny</th><th>Uwagi</th></tr></thead><tbody><tr><td><code>profiles</code></td><td><code>id</code> (uuid, klucz do <code>auth.users</code>), <code>email</code>, <code>role</code>, <code>created_at</code></td><td><code>role</code> to <code>teacher</code> albo <code>superadmin</code></td></tr><tr><td><code>participants</code></td><td><code>id</code>, <code>imie</code> (do 100 znaków), <code>klasa</code> (do 20), <code>created_at</code></td><td></td></tr><tr><td><code>pairs</code></td><td><code>id</code>, <code>round_number</code>, <code>white_id</code>, <code>black_id</code> (może być pusty), <code>result</code>, <code>created_at</code></td><td>klucze obce do <code>participants</code> z kasowaniem kaskadowym</td></tr></tbody></table></div>
+<p>Parowanie działa tak: uczestnicy sortowani alfabetycznie, pierwszy zostaje na miejscu, reszta obraca się o numer rundy minus jeden. Górna połowa dostaje białe, dolna czarne. Przy nieparzystej liczbie uczestników jedna osoba dostaje wolny los.</p>
+<h2 id="5-bezpieczenstwo">5. Bezpieczeństwo</h2>
+<p>Poniżej tylko to, co wynika z kodu i skryptów SQL w repozytorium. Polityk nie sprawdzałem na działającej bazie Supabase.</p>
+<div class="tw"><table><thead><tr><th>Zagrożenie</th><th>Zabezpieczenie</th></tr></thead><tbody><tr><td>Gość zapisuje lub zmienia dane</td><td>Włączone RLS. Zapis do <code>participants</code> i <code>pairs</code> wymaga roli <code>teacher</code> lub <code>superadmin</code> w tabeli <code>profiles</code>. Rola jest sprawdzana w bazie, nie w przeglądarce.</td></tr><tr><td>Nauczyciel usuwa dane</td><td>Kasowanie uczestników i par dozwolone w polityce tylko dla <code>superadmin</code>.</td></tr><tr><td>Nauczyciel zmienia sobie rolę</td><td>Brak polityk insert/update/delete na <code>profiles</code> dla klienta. Konta zakłada wyłącznie Edge Function.</td></tr><tr><td>Obcy zakłada konta</td><td>Edge Function sprawdza token wywołującego i jego rolę (musi być <code>superadmin</code>), wymaga hasła co najmniej 8 znaków i usuwa konto Auth, jeśli zapis profilu się nie uda.</td></tr><tr><td>Klucz <code>service_role</code> w przeglądarce</td><td>Występuje tylko w Edge Function, pobierany ze zmiennych środowiska Supabase. We froncie jest wyłącznie klucz <code>anon</code>.</td></tr><tr><td>Duplikaty par i niepoprawne wyniki</td><td>Opcjonalna migracja <code>001_integrity.sql</code> dodaje indeksy unikalne i ograniczenia na wynik. Trzeba ją uruchomić ręcznie.</td></tr><tr><td>Wstrzyknięcie znaczników w treść</td><td>React domyślnie escapuje wyświetlane teksty. W kodzie nie ma <code>dangerouslySetInnerHTML</code>.</td></tr><tr><td>Pingi z formularza kontaktowego</td><td>Ładunek dla Discorda ma <code>allowed_mentions: { parse: [] }</code>, a długości pól są obcinane.</td></tr><tr><td>Sekrety w repozytorium</td><td><code>.env</code> jest w <code>.gitignore</code>. W repozytorium jest tylko <code>.env.example</code> z przykładowymi wartościami.</td></tr></tbody></table></div>
+<p>Zależności produkcyjne: <code>npm audit --omit=dev</code> nie znalazł podatności. Pełny <code>npm audit</code> zgłasza 6 podatności (3 umiarkowane, 1 wysoka, 2 krytyczne) w łańcuchu narzędzi testowych (Vitest, między innymi <code>tinypool</code>). Nie trafiają one do zbudowanej aplikacji.</p>
+<h2 id="6-srodowiska-i-wdrozenie">6. Środowiska i wdrożenie</h2>
+<p>Produkcyjnie aplikacja stoi na Vercelu z katalogiem głównym <code>app/frontend</code>. Potrzebne zmienne: <code>VITE_SUPABASE_URL</code> i <code>VITE_SUPABASE_ANON_KEY</code> (wbudowywane w czasie budowania, po zmianie trzeba przebudować) oraz opcjonalnie <code>DISCORD_WEBHOOK_URL</code>.</p>
+<p>Kroki konfiguracji bazy opisuje README: uruchomić <code>schema.sql</code> w SQL Editorze Supabase, ręcznie założyć pierwszego superadmina (użytkownik w Auth plus wiersz w <code>profiles</code>), wdrożyć funkcję <code>supabase functions deploy create-user</code>, opcjonalnie uruchomić <code>001_integrity.sql</code>.</p>
+<p>Lokalnie:</p>
+<pre><code>cd app/frontend
+cp .env.example .env   # uzupełnij danymi z Supabase
+npm ci &amp;&amp; npm run dev
+npm test &amp;&amp; npm run build</code></pre>
+<p>Wariant z własnym backendem FastAPI i PostgreSQL na VPS jest w osobnej gałęzi <code>vps</code>. Ta dokumentacja go nie opisuje.</p>
+<h2 id="7-testy">7. Testy</h2>
+<p>Uruchomiłem <code>npx vitest run</code> w katalogu <code>app/frontend</code>. Wynik: 2 pliki, 9 testów, wszystkie zaliczone, czas około 0,2 s. Zrzuty ekranu powstały w osobnym skrypcie i nie są testami.</p>
+<div class="tw"><table><thead><tr><th>Rodzaj</th><th>Plik</th><th>Liczba testów</th><th>Wynik</th></tr></thead><tbody><tr><td>Jednostkowe: parowanie i punkty</td><td><code>pairing.test.js</code></td><td>5</td><td>zaliczone</td></tr><tr><td>Jednostkowe: wiadomość kontaktowa</td><td><code>contact.test.js</code></td><td>4</td><td>zaliczone</td></tr><tr><td>Interfejs (komponenty, przeglądarka)</td><td>brak</td><td>0</td><td>nie ma w projekcie</td></tr><tr><td>Reguły RLS na bazie</td><td>brak</td><td>0</td><td>nie ma w projekcie</td></tr><tr><td>Edge Function</td><td>brak</td><td>0</td><td>nie ma w projekcie</td></tr></tbody></table></div>
+<p>Zbudowanie aplikacji (<code>vite build</code>) przeszło bez błędów.</p>
+<h2 id="8-ograniczenia-i-dalszy-rozwoj">8. Ograniczenia i dalszy rozwój</h2>
+<ul><li>Polityk RLS, migracji i Edge Function nie uruchamiałem na prawdziwym Supabase. Opis bezpieczeństwa opiera się na czytaniu kodu SQL i TypeScript.</li><li>Zrzuty pochodzą z atrapy API, więc pokazują interfejs, ale nie potwierdzają działania z prawdziwą bazą. Nie testowałem na prawdziwym telefonie, tylko w oknie przeglądarki o szerokości 390 px.</li><li>Adres webhooka Discorda trafia do kodu strony (zmienna jest wystawiona przez Vite), więc każdy, kto otworzy stronę, może go odczytać i wysyłać na niego wiadomości. Ukrycie formularza dla gości tego nie zmienia. Odstęp 30 s jest sprawdzany tylko w przeglądarce. W razie nadużyć trzeba wygenerować webhook od nowa.</li><li>Migracja <code>001_integrity.sql</code> jest opcjonalna. Bez niej baza nie blokuje duplikatów par ani niepoprawnych wartości wyniku, a numer rundy liczy przeglądarka, więc dwóch nauczycieli generujących pary jednocześnie może dostać zdublowaną rundę.</li><li>Tryb gościa działa tylko w przeglądarce, ale dane i tak są publiczne: polityki <code>select</code> pozwalają czytać uczestników i pary każdemu, kto ma klucz <code>anon</code>.</li><li>Metoda parowania to schemat Buergera (każdy z każdym). Kolejne rundy po pełnym obiegu zaczynają się powtarzać, a aplikacja tego nie blokuje.</li><li>Brak testów interfejsu, testów RLS i testów Edge Function.</li><li>Import backupu wstawia rekordy po jednym, więc przy dużych plikach trwa i może zostać przerwany w połowie.</li><li>Nazwa szkoły jest wpisana w kodzie, a interfejs jest tylko po polsku.</li></ul>
+</main></div>
+<footer><span>Dokumentacja projektu</span><nav class="links"><a href="https://github.com/mat-jan/chess_layout">Kod na GitHubie</a><a href="dokumentacja.docx">Pobierz (Word)</a></nav></footer>
+</body></html>
